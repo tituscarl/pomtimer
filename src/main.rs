@@ -82,7 +82,7 @@ fn main() {
                                 let timer = Arc::clone(&timer_clone);
                                 move |s| {
                                     let mut t = timer.lock().unwrap();
-                                    *t = 5;
+                                    *t = 15 * 60;
                                     s.pop_layer();
                                     s.call_on_name("textviewtime", |v: &mut TextView| {
                                         v.set_content(format!("Time left: {}", format_time(*t)))
