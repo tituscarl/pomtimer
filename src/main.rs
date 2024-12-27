@@ -13,13 +13,17 @@ fn main() {
 
     let root_timer = Arc::new(Mutex::new(25 * 60));
 
-    let time_view = TextView::new(format!("")).with_name("textviewtime");
+    let time_view = TextView::new(format!(
+        "Time left: {}",
+        format_time(*root_timer.lock().unwrap())
+    ))
+    .with_name("textviewtime");
 
     let cb_sink = siv.cb_sink().clone();
 
     siv.add_layer(
         Dialog::new()
-            .title("Pomodoro Timer in Terminal!")
+            .title("Pomodoro timer at your terminal!")
             .content(time_view)
             .button("Start/Resume", {
                 let timer_clone = Arc::clone(&root_timer);
@@ -46,6 +50,53 @@ fn main() {
                     });
                 }
             })
+            .button("Settings", {
+                let timer_clone = Arc::clone(&root_timer);
+                move |s| {
+                    s.add_layer(
+                        Dialog::new()
+                            .content(TextView::new("Choose a preset time:"))
+                            .button("5 mins", {
+                                let timer = Arc::clone(&timer_clone);
+                                move |s| {
+                                    let mut t = timer.lock().unwrap();
+                                    *t = 5 * 60;
+                                    s.pop_layer();
+                                    s.call_on_name("textviewtime", |v: &mut TextView| {
+                                        v.set_content(format!("Time left: {}", format_time(*t)))
+                                    });
+                                }
+                            })
+                            .button("10 mins", {
+                                let timer = Arc::clone(&timer_clone);
+                                move |s| {
+                                    let mut t = timer.lock().unwrap();
+                                    *t = 10 * 60;
+                                    s.pop_layer();
+                                    s.call_on_name("textviewtime", |v: &mut TextView| {
+                                        v.set_content(format!("Time left: {}", format_time(*t)))
+                                    });
+                                }
+                            })
+                            .button("15 mins", {
+                                let timer = Arc::clone(&timer_clone);
+                                move |s| {
+                                    let mut t = timer.lock().unwrap();
+                                    *t = 5;
+                                    s.pop_layer();
+                                    s.call_on_name("textviewtime", |v: &mut TextView| {
+                                        v.set_content(format!("Time left: {}", format_time(*t)))
+                                    });
+                                }
+                            })
+                            .button("Go back", {
+                                move |s| {
+                                    s.pop_layer();
+                                }
+                            }),
+                    );
+                }
+            })
             .button("Quit", |s| s.quit()),
     );
 
@@ -55,19 +106,32 @@ fn main() {
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(1));
 
-        let running = is_running_clone.lock().unwrap();
+        let mut running = is_running_clone.lock().unwrap();
         let inner = Arc::clone(&root_timer_clone);
         let mut timer = root_timer_clone.lock().unwrap();
         if *running {
             *timer -= 1;
-            cb_sink
-                .send(Box::new(move |s: &mut Cursive| {
-                    let time_left = *inner.lock().unwrap();
-                    s.call_on_name("textviewtime", |v: &mut TextView| {
-                        v.set_content(format!("Time left: {}", format_time(time_left)))
-                    });
-                }))
-                .unwrap();
+            if *timer != 0 {
+                cb_sink
+                    .send(Box::new(move |s: &mut Cursive| {
+                        let time_left = *inner.lock().unwrap();
+                        s.call_on_name("textviewtime", |v: &mut TextView| {
+                            v.set_content(format!("Time left: {}", format_time(time_left)))
+                        });
+                    }))
+                    .unwrap();
+            } else {
+                *timer = 25 * 60;
+                cb_sink
+                    .send(Box::new(move |s: &mut Cursive| {
+                        s.add_layer(Dialog::info("Time is up!"));
+                        s.call_on_name("textviewtime", |v: &mut TextView| {
+                            v.set_content(format!("Time left: {}", format_time(25 * 60)))
+                        });
+                    }))
+                    .unwrap();
+                *running = false;
+            }
         }
     });
 
